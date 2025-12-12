@@ -150,11 +150,16 @@ def get_subset(
         )
 
     try:
+        # Fix: El archivo trae la variable como 'var' en lugar de 'sti' (según debug script)
         if "sti" not in ds.data_vars:
-            raise HTTPException(
-                status_code=500,
-                detail="Variable 'sti' no encontrada en el dataset",
-            )
+            if "var" in ds.data_vars:
+                print("DEBUG: Renaming variable 'var' to 'sti'")
+                ds = ds.rename({"var": "sti"})
+            else:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Variable 'sti' (o 'var') no encontrada. Variables: {list(ds.data_vars)}",
+                )
 
         # Recorte Geográfico
         # DEBUG: User requested "verlo todo" (see everything). Bypassing subset for debugging.

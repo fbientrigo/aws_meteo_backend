@@ -168,23 +168,17 @@ def load_dataset(run: str, step: str | int) -> xr.Dataset:
 
     # 2. Abrir archivo local
     try:
-        # Pangu/ERA5 suelen ser NetCDF4 puros. H5NetCDF a veces falla con algunos filtros.
-        # Probamos 'netcdf4' primero que es el standard robusto.
-        ds = xr.open_dataset(local_path, engine="netcdf4")
-        logger.info("Dataset abierto correctamente con engine='netcdf4'.")
+        # Según debug_s3.py, 'h5netcdf' funcionó y 'netcdf4' falló con HDF error.
+        # Volvemos a h5netcdf como primario.
+        ds = xr.open_dataset(local_path, engine="h5netcdf")
+        logger.info("Dataset abierto correctamente con engine='h5netcdf'.")
         return ds
     except Exception as exc:
-        logger.warning("Fallo con engine='netcdf4': %s. Reintentando con 'h5netcdf'...", exc)
+        logger.error("Error abriendo NetCDF local %s con h5netcdf: %s", local_path, exc)
+        # Si está corrupto, intentar borrarlo para la próxima
         try:
-             ds = xr.open_dataset(local_path, engine="h5netcdf")
-             logger.info("Dataset abierto correctamente con engine='h5netcdf'.")
-             return ds
-        except Exception as exc2:
-            logger.error("Error abriendo NetCDF local %s con ambos engines. Error: %s", local_path, exc2)
-            # Si está corrupto, intentar borrarlo para la próxima
-            try:
-                os.remove(local_path)
-            except:
-                pass
-            raise
+            os.remove(local_path)
+        except:
+            pass
+        raise
 

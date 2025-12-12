@@ -54,16 +54,25 @@ def list_runs() -> List[str]:
     """
     paginator = s3_client.get_paginator("list_objects_v2")
     runs: Set[str] = set()
+    
+    print(f"DEBUG: Listing runs in bucket={BUCKET}, prefix={BASE_PREFIX}, delimiter='/'")
 
     # Usamos Delimiter='/' para ver "carpetas" en vez de listar todos los archivos recursivamente
     for page in paginator.paginate(Bucket=BUCKET, Prefix=BASE_PREFIX, Delimiter="/"):
+        print(f"DEBUG: Processing page. CommonPrefixes count: {len(page.get('CommonPrefixes', []))}")
         for prefix_info in page.get("CommonPrefixes", []):
             prefix = prefix_info.get("Prefix")  # ej: indices/sti/run=2025111500/
+            print(f"DEBUG: Found prefix: {prefix}")
             m = re.search(r"run=(\d{10})/?", prefix)
             if m:
+                print(f"DEBUG: Match found! Run ID: {m.group(1)}")
                 runs.add(m.group(1))
+            else:
+                print(f"DEBUG: No regex match for prefix: {prefix}")
 
-    return sorted(runs)
+    sorted_runs = sorted(runs)
+    print(f"DEBUG: Final runs found: {sorted_runs}")
+    return sorted_runs
 
 
 def list_steps(run: str) -> List[str]:

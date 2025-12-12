@@ -50,16 +50,16 @@ def _object_exists(key: str) -> bool:
 # --------------------------------------------------------------------
 def list_runs() -> List[str]:
     """
-    Lista los 'run=YYYYMMDDHH' disponibles bajo indices/sti/.
-    Se basa en las keys reales del bucket.
+    Lista los 'run=YYYYMMDDHH' leyendo las sub-carpetas (CommonPrefixes).
     """
     paginator = s3_client.get_paginator("list_objects_v2")
     runs: Set[str] = set()
 
-    for page in paginator.paginate(Bucket=BUCKET, Prefix=BASE_PREFIX):
-        for obj in page.get("Contents", []):
-            key = obj["Key"]  # ej: indices/sti/run=2025111500/step=072/sti_chile_run=...
-            m = re.search(r"run=(\d{10})/", key)
+    # Usamos Delimiter='/' para ver "carpetas" en vez de listar todos los archivos recursivamente
+    for page in paginator.paginate(Bucket=BUCKET, Prefix=BASE_PREFIX, Delimiter="/"):
+        for prefix_info in page.get("CommonPrefixes", []):
+            prefix = prefix_info.get("Prefix")  # ej: indices/sti/run=2025111500/
+            m = re.search(r"run=(\d{10})/?", prefix)
             if m:
                 runs.add(m.group(1))
 
@@ -68,17 +68,16 @@ def list_runs() -> List[str]:
 
 def list_steps(run: str) -> List[str]:
     """
-    Lista los 'step=XXX' disponibles para un run dado.
-    Devuelve siempre steps normalizados a 3 dígitos (e.g. '048').
+    Lista los 'step=XXX' leyendo las sub-carpetas (CommonPrefixes) dentro de un run.
     """
-    prefix = f"{BASE_PREFIX}run={run}/"
+    prefix_path = f"{BASE_PREFIX}run={run}/"
     paginator = s3_client.get_paginator("list_objects_v2")
     steps: Set[str] = set()
 
-    for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix):
-        for obj in page.get("Contents", []):
-            key = obj["Key"]  # ej: indices/sti/run=2025111500/step=072/...
-            m = re.search(r"step=(\d{3})/", key)
+    for page in paginator.paginate(Bucket=BUCKET, Prefix=prefix_path, Delimiter="/"):
+        for prefix_info in page.get("CommonPrefixes", []):
+            prefix = prefix_info.get("Prefix")  # ej: indices/sti/run=.../step=072/
+            m = re.search(r"step=(\d{3})/?", prefix)
             if m:
                 steps.add(m.group(1))
 

@@ -13,8 +13,8 @@ sys.modules["s3_helpers"] = mock_s3
 
 # Mock api_aws.routers.forecast to avoid importing lib/matplotlib
 mock_router = MagicMock()
-sys.modules["api_aws.routers"] = MagicMock()
-sys.modules["api_aws.routers.forecast"] = mock_router
+sys.modules["routers"] = MagicMock()
+sys.modules["routers.forecast"] = mock_router
 mock_router.router = MagicMock()
 
 # Configure mocks
@@ -22,7 +22,7 @@ mock_s3.list_runs.return_value = ["2025010100"]
 mock_s3.list_steps.return_value = ["000"]
 
 # Import get_subset directly
-from api_aws.main import get_subset
+from main import get_subset
 
 class TestSTIEndpoint(unittest.TestCase):
     def test_get_subset_flattened_structure(self):

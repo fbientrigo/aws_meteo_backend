@@ -7,3 +7,11 @@ fsspec
 s3fs
 h5netcdf
 numpy
+requests
+pandas
+scikit-learn
+matplotlib
+cdsapi
+gdown
+netCDF4
+pytest

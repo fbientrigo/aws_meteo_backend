@@ -20,7 +20,7 @@ mock_ds.sel.return_value = mock_point
 mock_s3.load_dataset.return_value = mock_ds
 
 from fastapi.testclient import TestClient
-from api_aws.main import app
+from main import app
 import pytest
 
 client = TestClient(app)

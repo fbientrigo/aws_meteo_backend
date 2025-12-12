@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from api_aws.main import app
+from main import app
 import pytest
 import os
 

@@ -154,26 +154,33 @@ def get_subset(
             )
 
         # Recorte Geográfico
-        try:
-            # 1. Intentar recorte directo (coordenadas negativas, ej: -75)
-            sub = ds["sti"].sel(
-                latitude=slice(lat_max, lat_min),
-                longitude=slice(lon_min, lon_max),
-            )
-            
-            # 2. Si vacío, intentar formato 0-360 (ej: 285)
-            if sub.size == 0:
-                lmin_360 = lon_min % 360
-                lmax_360 = lon_max % 360
-                sub = ds["sti"].sel(
-                    latitude=slice(lat_max, lat_min),
-                    longitude=slice(lmin_360, lmax_360),
-                )
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Error en recorte lat/lon: {e}",
-            )
+        # DEBUG: User requested "verlo todo" (see everything). Bypassing subset for debugging.
+        print(f"DEBUG: Dataset loaded. Dimensions: {ds.dims}, Coords: {ds.coords}")
+        
+        # Bypass subset logic - return full dataset (files are small ~400KB)
+        sub = ds["sti"]
+        
+        # try:
+        #     # 1. Intentar recorte directo (coordenadas negativas, ej: -75)
+        #     sub = ds["sti"].sel(
+        #         latitude=slice(lat_max, lat_min),
+        #         longitude=slice(lon_min, lon_max),
+        #     )
+        #     
+        #     # 2. Si vacío, intentar formato 0-360 (ej: 285)
+        #     if sub.size == 0:
+        #         lmin_360 = lon_min % 360
+        #         lmax_360 = lon_max % 360
+        #         sub = ds["sti"].sel(
+        #             latitude=slice(lat_max, lat_min),
+        #             longitude=slice(lmin_360, lmax_360),
+        #         )
+        # except Exception as e:
+        #     print(f"DEBUG Error in subset: {e}")
+        #     raise HTTPException(
+        #         status_code=400,
+        #         detail=f"Error en recorte lat/lon: {e}",
+        #     )
 
         # Flattening logic for frontend (Leaflet Heatmap)
         lons_in = sub["longitude"].values
@@ -184,6 +191,8 @@ def get_subset(
         flat_lats = lat_grid.flatten().tolist()
         flat_lons = lon_grid.flatten().tolist()
         flat_sti = sub.values.flatten().tolist()
+        
+        print(f"DEBUG: Returning {len(flat_sti)} points.")
 
         return {
             "run": run,

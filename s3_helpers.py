@@ -180,7 +180,8 @@ def load_dataset(run: str, step: str | int) -> xr.Dataset:
     try:
         # Según debug_s3.py, 'h5netcdf' funcionó y 'netcdf4' falló con HDF error.
         # Volvemos a h5netcdf como primario.
-        ds = xr.open_dataset(local_path, engine="h5netcdf")
+        # FIX CRITICO: cache=False para evitar problemas de threading/concurrency con HDF5 en Uvicorn
+        ds = xr.open_dataset(local_path, engine="h5netcdf", cache=False)
         logger.info("Dataset abierto correctamente con engine='h5netcdf'.")
         return ds
     except Exception as exc:

@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+boto3
+xarray
+boto3
+fsspec
+s3fs
+h5netcdf
+numpy

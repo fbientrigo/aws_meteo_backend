@@ -141,6 +141,9 @@ def get_subset(
             detail="NetCDF no encontrado en S3 para el run/step especificado",
         )
     except Exception as e:
+        import traceback
+        print(f"CRITICAL ERROR LOADING DATASET: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=500,
             detail=f"Error abriendo NetCDF: {e}",

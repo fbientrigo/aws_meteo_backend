@@ -153,32 +153,22 @@ def get_subset(
                 detail="Variable 'sti' no encontrada en el dataset",
             )
 
+        # Recorte Geográfico
         try:
-            # Helper to normalize longitude to 0-360 if needed
-            # ERA5 typically uses 0-360. Frontend uses -180 to 180.
-            def to_360(lon):
-                return lon % 360
-
-            lmin_360 = to_360(lon_min)
-            lmax_360 = to_360(lon_max)
-
-            # Handle dateline crossing if needed, but for Chile/Americas typically lmin < lmax in 360 too
-            # e.g -75 -> 285, -70 -> 290. 285 < 290.
-
-            try:
-                # First try direct slice (in case data is -180/180)
+            # 1. Intentar recorte directo (coordenadas negativas, ej: -75)
+            sub = ds["sti"].sel(
+                latitude=slice(lat_max, lat_min),
+                longitude=slice(lon_min, lon_max),
+            )
+            
+            # 2. Si vacío, intentar formato 0-360 (ej: 285)
+            if sub.size == 0:
+                lmin_360 = lon_min % 360
+                lmax_360 = lon_max % 360
                 sub = ds["sti"].sel(
                     latitude=slice(lat_max, lat_min),
-                    longitude=slice(lon_min, lon_max),
+                    longitude=slice(lmin_360, lmax_360),
                 )
-                
-                # If empty, try 0-360 format
-                if sub.size == 0:
-                    sub = ds["sti"].sel(
-                        latitude=slice(lat_max, lat_min),
-                        longitude=slice(lmin_360, lmax_360),
-                    )
-
         except Exception as e:
             raise HTTPException(
                 status_code=400,
@@ -186,28 +176,11 @@ def get_subset(
             )
 
         # Flattening logic for frontend (Leaflet Heatmap)
-        # 1. Generate 2D grids
-        # lats_in = sub["latitude"].values  # 1D array
-        # lons_in = sub["longitude"].values # 1D array
         lons_in = sub["longitude"].values
         lats_in = sub["latitude"].values
-
-        # Note: meshgrid order is (x, y) -> (lon, lat) usually, but check dims
-        # xarray .sel usually preserves order. sub dims: (latitude, longitude) ideally
-        # If we want flattened arrays corresponding to (lat, lon) pairs:
-        # We need to ensure the order of meshgrid matches how we flatten the data.
-        # sub.values is (lat, lon).
-        # np.meshgrid(lons, lats) returns (lon_grid, lat_grid) with shape (lat, lon) by default (indexing='xy') NO, wait.
-        # indexing='xy' (default): output shape (N_y, N_x) where N_y = len(lats), N_x = len(lons). Correct.
         
         lon_grid, lat_grid = np.meshgrid(lons_in, lats_in)
 
-        # 2. Flatten everything
-        # flatten() is row-major (C-style) by default.
-        # array([[1, 2], [3, 4]]) -> [1, 2, 3, 4]
-        # Correspond to iterating last dim (longitude) fastest, then latitude.
-        # This matches (lat, lon) array layout.
-        
         flat_lats = lat_grid.flatten().tolist()
         flat_lons = lon_grid.flatten().tolist()
         flat_sti = sub.values.flatten().tolist()

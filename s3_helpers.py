@@ -121,34 +121,51 @@ def build_nc_s3_uri(run: str, step: str | int) -> str:
 # --------------------------------------------------------------------
 # Carga de Dataset
 # --------------------------------------------------------------------
+# --------------------------------------------------------------------
+# Carga de Dataset
+# --------------------------------------------------------------------
+import os
+import tempfile
+
 def load_dataset(run: str, step: str | int) -> xr.Dataset:
     """
-    Abre el Dataset directamente desde S3 usando fsspec + h5netcdf,
-    sin descargar a disco.
-
-    Lanza FileNotFoundError si el objeto no existe.
-    Puede lanzar OSError / ValueError si el NetCDF está corrupto.
+    Descarga el NetCDF desde S3 a un archivo temporal y lo abre.
+    Esto evita errores de HDF5/streaming (H5DSget_num_scales) al leer directo de S3.
     """
     key = build_nc_key(run, step)
     s3_uri = build_nc_s3_uri(run, step)
+    
+    # Nombre de archivo local seguro
+    step_str = _normalize_step(step)
+    local_filename = f"sti_{run}_{step_str}.nc"
+    local_path = os.path.join(tempfile.gettempdir(), local_filename)
 
-    logger.info("Abriendo NetCDF desde S3: %s", s3_uri)
+    logger.info("Solicitando Dataset: %s", s3_uri)
 
-    if not _object_exists(key):
-        logger.warning("NetCDF no encontrado en S3 para run=%s, step=%s", run, step)
-        raise FileNotFoundError(f"Objeto no encontrado en S3: {s3_uri}")
+    # 1. Verificar si ya existe en /tmp para caché simple
+    if not os.path.exists(local_path):
+        logger.info("Descargando %s -> %s", key, local_path)
+        try:
+            s3_client.download_file(BUCKET, key, local_path)
+        except Exception as exc:
+            logger.error("Error descargando desde S3: %s", exc)
+            # Mapear error de S3 a FileNotFoundError si es 404
+            raise FileNotFoundError(f"No se pudo descargar {s3_uri}: {exc}")
+    else:
+        logger.info("Usando caché local: %s", local_path)
 
-    path = f"{BUCKET}/{key}"
-
-    # NO usamos 'with': dejamos el file abierto y confiamos en ds.close() más arriba
-    f = s3_fs.open(path, mode="rb")
+    # 2. Abrir archivo local
     try:
-        ds = xr.open_dataset(f, engine="h5netcdf")
+        # Abrimos con engine="h5netcdf" o "netcdf4" ahora que es local
+        ds = xr.open_dataset(local_path, engine="h5netcdf")
+        logger.info("Dataset abierto correctamente.")
+        return ds
     except Exception as exc:
-        # Si falla al abrir, cerramos el file para no dejarlo colgando
-        f.close()
-        logger.error("Error leyendo NetCDF desde %s: %s", s3_uri, exc)
+        logger.error("Error abriendo NetCDF local %s: %s", local_path, exc)
+        # Si está corrupto, intentar borrarlo para la próxima
+        try:
+            os.remove(local_path)
+        except:
+            pass
         raise
-
-    return ds
 

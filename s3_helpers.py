@@ -124,81 +124,127 @@ def build_nc_s3_uri(run: str, step: str | int) -> str:
 # --------------------------------------------------------------------
 # Carga de Dataset
 # --------------------------------------------------------------------
+# --------------------------------------------------------------------
+# Carga de Dataset (Robust Patch)
+# --------------------------------------------------------------------
 import os
 import tempfile
+import uuid
+import shutil
+from filelock import FileLock  # Dependencia externa robusta
+
+def pick_data_var(ds: xr.Dataset, preferred: str = "sti") -> str:
+    """
+    Selecciona la variable de datos correcta.
+    1. Si 'preferred' existe, se usa.
+    2. Si no, y solo hay 1 variable de datos, se usa esa.
+    3. Si no, error explícito.
+    """
+    if preferred in ds.data_vars:
+        return preferred
+    
+    # Filtrar coordenadas o variables auxiliares que a veces xarray marca como data_vars
+    # (aunque netcdf4 suele ser limpio). 
+    # Estrategia simple: si "var" está, usémosla.
+    if "var" in ds.data_vars:
+        return "var"
+        
+    # Fallback genérico: si hay exactamente una, la devolvemos
+    if len(ds.data_vars) == 1:
+        found = next(iter(ds.data_vars))
+        logger.warning(f"Variable preferida '{preferred}' no encontrada. Usando única variable: '{found}'")
+        return found
+        
+    raise KeyError(f"Variable '{preferred}' no encontrada y no se pudo deducir una única variable. Disponibles: {list(ds.data_vars)}")
 
 def load_dataset(run: str, step: str | int) -> xr.Dataset:
     """
-    Descarga el NetCDF desde S3 a un archivo temporal y lo abre.
-    Esto evita errores de HDF5/streaming (H5DSget_num_scales) al leer directo de S3.
+    Descarga robusta y thread-safe de NetCDF desde S3.
+    Implementa:
+    1. Lock por archivo (FileLock) para coordinar procesos concurrentes.
+    2. Descarga atómica (temp -> rename).
+    3. Validación de apertura antes de exponer el archivo.
+    4. Auto-recovery si el archivo final está corrupto.
     """
     key = build_nc_key(run, step)
-    s3_uri = build_nc_s3_uri(run, step)
-    
-    # Nombre de archivo local seguro
     step_str = _normalize_step(step)
     local_filename = f"sti_{run}_{step_str}.nc"
-    local_path = os.path.join(tempfile.gettempdir(), local_filename)
+    temp_dir = tempfile.gettempdir()
+    final_path = os.path.join(temp_dir, local_filename)
+    lock_path = final_path + ".lock"
 
-    logger.info("Solicitando Dataset: %s", s3_uri)
+    # Usamos FileLock para asegurar que SOLO UN proceso/hilo descargue el archivo a la vez.
+    # Timeout de 60s para evitar hangs eternos.
+    lock = FileLock(lock_path, timeout=60)
+    
+    with lock:
+        # 1. Verificar si ya existe y es válido
+        if os.path.exists(final_path):
+            try:
+                # Intento rápido de apertura para validar integridad
+                # cache=False es CRÍTICO para h5netcdf + uvicorn
+                with xr.open_dataset(final_path, engine="h5netcdf", cache=False) as ds_check:
+                    pass 
+                logger.info(f"Cache HIT y fichero válido: {final_path}")
+            except Exception as e:
+                logger.warning(f"Cache corrupto detectado en {final_path} ({e}). Borrando para re-descargar.")
+                try:
+                    os.remove(final_path)
+                except OSError:
+                    pass
 
-    # 1. Verificar si ya existe en /tmp para caché simple
-    if not os.path.exists(local_path):
-        import uuid
-        # Descarga atómica: Descargar a un archivo temporal único y luego renombrar
-        # Esto evita que otro request intente leer el archivo mientras se está descargando (race condition)
-        temp_download_path = f"{local_path}.{uuid.uuid4()}.tmp"
-        
-        logger.info("Descargando %s -> %s", key, temp_download_path)
-        try:
-            s3_client.download_file(BUCKET, key, temp_download_path)
-            # Rename atómico (en POSIX)
-            os.rename(temp_download_path, local_path)
-            logger.info("Descarga completada y archivo renombrado a: %s", local_path)
-        except Exception as exc:
-            logger.error("Error descargando desde S3: %s", exc)
-            # Limpiar archivo temporal si falló
-            if os.path.exists(temp_download_path):
-                os.remove(temp_download_path)
-            raise FileNotFoundError(f"No se pudo descargar {s3_uri}: {exc}")
-    else:
-        logger.info("Usando caché local: %s", local_path)
-
-    # Validar tamaño del archivo (sanity check)
-    file_size = os.path.getsize(local_path)
-    logger.info("Tamaño del archivo local: %s bytes", file_size)
-    if file_size < 100:
-        logger.error("El archivo descargado es sospechosamente pequeño (<100 bytes). Posible error de XML de S3 guardado como .nc")
-        # Borrar para reintentar luego
-        try:
-            os.remove(local_path)
-        except:
-            pass
-        raise ValueError("El archivo NetCDF descargado está vacío o corrupto.")
-
-    # 2. Abrir archivo local
-    try:
-        import threading
-        # Global lock para evitar colisiones en la librería HDF5 (que no es thread-safe a nivel C)
-        # Esto serializa las aperturas de archivos, pero es necesario para estabilidad.
-        _HDF5_LOCK = threading.Lock()
-        
-        with _HDF5_LOCK:
-            ds = xr.open_dataset(local_path, engine="h5netcdf", cache=False)
-        
-        # Estandarizacion de variables: Rename 'var' -> 'sti' if present
-        if "sti" not in ds.data_vars and "var" in ds.data_vars:
-            logger.info("Normalizando variable: 'var' -> 'sti'")
-            ds = ds.rename({"var": "sti"})
+        # 2. Descargar si no existe (o se borró por corrupto)
+        if not os.path.exists(final_path):
+            # Nombre temporal único en el mismo FS para permitir rename atómico
+            tmp_download_path = os.path.join(temp_dir, f"{local_filename}.{uuid.uuid4()}.tmp")
             
-        logger.info("Dataset abierto y normalizado correctamente.")
-        return ds
-    except Exception as exc:
-        logger.error("Error abriendo NetCDF local %s con h5netcdf: %s", local_path, exc)
-        # Si está corrupto, intentar borrarlo para la próxima
-        try:
-            os.remove(local_path)
-        except:
-            pass
-        raise
+            logger.info(f"Iniciando descarga: {key} -> {tmp_download_path}")
+            try:
+                s3_client.download_file(BUCKET, key, tmp_download_path)
+                
+                # Validar el archivo recién bajado ANTES de renombrarlo
+                if os.path.getsize(tmp_download_path) < 100:
+                    raise ValueError("El archivo descargado es demasiado pequeño (<100B).")
+                
+                # Prueba de fuego con Xarray
+                with xr.open_dataset(tmp_download_path, engine="h5netcdf", cache=False) as ds_test:
+                    pass
+                
+                # 3. Rename atómico: Esto es lo que "publica" el archivo
+                # os.replace es atómico en POSIX y Windows (Py3.3+)
+                os.replace(tmp_download_path, final_path)
+                logger.info(f"Descarga validada y publicada en: {final_path}")
+                
+            except Exception as e:
+                logger.error(f"Fallo en descarga/validación de {key}: {e}")
+                # Limpieza de basura
+                if os.path.exists(tmp_download_path):
+                    try:
+                        os.remove(tmp_download_path)
+                    except:
+                        pass
+                raise  # Re-raise para que el endpoint devuelva 500
 
+    # ----------------------------------------------------------
+    # 4. Abrir para devolver el objeto (Fuera del lock de descarga, pero Safe)
+    # ----------------------------------------------------------
+    # Nota: Ya está validado que existe y es íntegro.
+    # h5netcdf no es thread-safe en lectura concurrente del mismo handle, 
+    # pero cache=False nos da handles distintos.
+    # Si aún así falla, el problema es de la lib HDF5 a nivel C global.
+    try:
+        ds = xr.open_dataset(final_path, engine="h5netcdf", cache=False)
+        
+        # 5. Normalizar variable
+        target_var = pick_data_var(ds, preferred="sti")
+        if target_var != "sti":
+            logger.info(f"Renombrando variable '{target_var}' -> 'sti'")
+            ds = ds.rename({target_var: "sti"})
+            
+        return ds
+
+    except Exception as e:
+        logger.error(f"Error fatal abriendo dataset {final_path}: {e}")
+        # Si falla aquí, es muy raro porque ya se validó. Podría ser race condition externa muy agresiva
+        # o fallo de memoria.
+        raise

@@ -178,7 +178,13 @@ def load_dataset(run: str, step: str | int) -> xr.Dataset:
 
     # 2. Abrir archivo local
     try:
-        ds = xr.open_dataset(local_path, engine="h5netcdf", cache=False)
+        import threading
+        # Global lock para evitar colisiones en la librería HDF5 (que no es thread-safe a nivel C)
+        # Esto serializa las aperturas de archivos, pero es necesario para estabilidad.
+        _HDF5_LOCK = threading.Lock()
+        
+        with _HDF5_LOCK:
+            ds = xr.open_dataset(local_path, engine="h5netcdf", cache=False)
         
         # Estandarizacion de variables: Rename 'var' -> 'sti' if present
         if "sti" not in ds.data_vars and "var" in ds.data_vars:

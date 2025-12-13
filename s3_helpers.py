@@ -177,6 +177,7 @@ def load_dataset(run: str, step: str | int) -> xr.Dataset:
         raise ValueError("El archivo NetCDF descargado está vacío o corrupto.")
 
     # 2. Abrir archivo local
+    try:
         ds = xr.open_dataset(local_path, engine="h5netcdf", cache=False)
         
         # Estandarizacion de variables: Rename 'var' -> 'sti' if present

@@ -1,0 +1,14 @@
+[Unit]
+Description=aws_meteo_backend API (uvicorn)
+After=aws-meteo-bootstrap.service network-online.target
+Requires=aws-meteo-bootstrap.service
+
+[Service]
+Environment=AWS_METEO_DIR=/opt/app/aws_meteo_backend
+ExecStart=/bin/bash -lc "/opt/app/aws_meteo_backend/ops/run_api.sh"
+Restart=always
+RestartSec=3
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

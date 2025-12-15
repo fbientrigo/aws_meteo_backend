@@ -1,0 +1,14 @@
+[Unit]
+Description=aws_meteo_backend bootstrap (venv + pip deps)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=AWS_METEO_DIR=/opt/app/aws_meteo_backend
+ExecStart=/bin/bash -lc "/opt/app/aws_meteo_backend/ops/bootstrap.sh"
+RemainAfterExit=yes
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

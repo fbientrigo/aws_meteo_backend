@@ -243,7 +243,9 @@ def load_dataset(run: str, step: str | int) -> xr.Dataset:
     # Si aún así falla, el problema es de la lib HDF5 a nivel C global.
     try:
         # Importante: El lock aquí también
+        logger.info(f"Acquiring HDF5 lock for {final_path}")
         with _HDF5_LOCK:
+            logger.info(f"Opening dataset {final_path} with h5netcdf")
             ds = xr.open_dataset(final_path, engine="h5netcdf", cache=False)
         
             # 5. Normalizar variable (dentro del lock es más seguro si hace lazy load de metadatos)
@@ -252,10 +254,17 @@ def load_dataset(run: str, step: str | int) -> xr.Dataset:
                 logger.info(f"Renombrando variable '{target_var}' -> 'sti'")
                 ds = ds.rename({target_var: "sti"})
             
+            # CRITICAL FIX: Eager load inside the lock to prevent HDF5 concurrency issues
+            logger.info(f"Starting eager load for {final_path}")
+            ds.load()
+            logger.info(f"Finished eager load for {final_path}")
+            
         return ds
 
     except Exception as e:
-        logger.error(f"Error fatal abriendo dataset {final_path}: {e}")
+        import traceback
+        logger.error(f"Error fatal abriendo/cargando dataset {final_path}: {e}")
+        logger.error(traceback.format_exc())
         # Si falla aquí, es muy raro porque ya se validó. Podría ser race condition externa muy agresiva
         # o fallo de memoria.
         raise

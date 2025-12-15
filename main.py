@@ -86,6 +86,11 @@ def get_summary(run: str, step: str):
         )
     except Exception as e:
         # Aquí pueden caer errores de IO, HDF5, netCDF corrupto, etc.
+        import traceback
+        import sys
+        print(f"CRITICAL ERROR LOADING DATASET in get_summary: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        
         raise HTTPException(
             status_code=500,
             detail=f"Error abriendo NetCDF: {e}",
@@ -146,8 +151,12 @@ def get_subset(
         )
     except Exception as e:
         import traceback
-        print(f"CRITICAL ERROR LOADING DATASET: {e}")
-        traceback.print_exc()
+        import sys
+        
+        # Log error to stderr so uvicorn captures it
+        print(f"CRITICAL ERROR LOADING DATASET in get_subset: {e}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        
         raise HTTPException(
             status_code=500,
             detail=f"Error abriendo NetCDF: {e}",

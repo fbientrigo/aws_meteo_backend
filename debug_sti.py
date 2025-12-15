@@ -70,6 +70,23 @@ def test_engines(local_path):
             logger.info(f"  Dims: {dict(ds.dims)}")
             logger.info(f"  Data Vars: {list(ds.data_vars)}")
             logger.info(f"  Coords: {list(ds.coords)}")
+            
+            # --- SUMMARY CALCULATION (First Principles) ---
+            target_var = None
+            if "sti" in ds.data_vars:
+                target_var = "sti"
+            elif "var" in ds.data_vars:
+                target_var = "var"
+            
+            if target_var:
+                data = ds[target_var]
+                v_min = float(data.min().values)
+                v_max = float(data.max().values)
+                v_mean = float(data.mean().values)
+                logger.info(f"  [STATS] Variable '{target_var}': Min={v_min}, Max={v_max}, Mean={v_mean}")
+            else:
+                logger.warning("  [STATS] Neither 'sti' nor 'var' found. Cannot calculate summary.")
+            
             ds.close()
         except ImportError:
             logger.warning(f"  [SKIP] Engine {eng} not installed.")

@@ -22,7 +22,10 @@ def run_stress_test():
     step = "072"
     
     # Clean up before starting to test download race too
-    local_file = f"/tmp/sti_{run}_{step}.nc"
+    import tempfile
+    run = "2025121400"
+    step = "048"
+    local_file = os.path.join(tempfile.gettempdir(), f"sti_{run}_{step}.nc")
     if os.path.exists(local_file):
         os.remove(local_file)
         print(f"Cleaned up {local_file}")

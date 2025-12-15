@@ -32,6 +32,8 @@ app.add_middleware(
 # --- FIN HOTFIX CORS ---
 
 app.include_router(forecast.router)
+from routers import historic
+app.include_router(historic.router, prefix="/historic", tags=["Historic"])
 
 
 # --------------------------------------------------------------------

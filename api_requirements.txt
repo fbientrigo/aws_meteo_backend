@@ -16,3 +16,5 @@ gdown
 netCDF4
 pytest
 filelock
+cachetools
+dask

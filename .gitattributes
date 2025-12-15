@@ -1,0 +1,18 @@
+# Por defecto: texto con LF
+* text=auto eol=lf
+
+# Scripts: siempre LF
+*.sh text eol=lf
+*.bash text eol=lf
+
+# Python/YAML/Docker: siempre LF (opcional, pero buenísimo)
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+Dockerfile text eol=lf
+
+# Binarios: no tocar
+*.png binary
+*.jpg binary
+*.pdf binary
+*.zip binary

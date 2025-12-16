@@ -36,9 +36,17 @@ from routers import historic
 app.include_router(historic.router, prefix="/historic", tags=["Historic"])
 
 
+
 # --------------------------------------------------------------------
 # Endpoints básicos
 # --------------------------------------------------------------------
+
+import logging
+logging.getLogger(__name__).info("Logging is alive")
+
+
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}

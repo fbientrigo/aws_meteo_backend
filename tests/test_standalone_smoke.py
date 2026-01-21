@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 # This prevents 's3_helpers' from trying to import boto3/fsspec if they are missing,
 # or from trying to connect to AWS.
 mock_s3 = MagicMock()
-sys.modules["s3_helpers"] = mock_s3
+sys.modules["app.s3_helpers"] = mock_s3
 mock_s3.list_runs.return_value = ["2025010100"]
 
 # 2. Mock lib if necessary (though it should be there now)
@@ -14,7 +14,7 @@ mock_s3.list_runs.return_value = ["2025010100"]
 # So we don't mock 'lib' unless we suspect it invokes heavy things on import.
 
 from fastapi.testclient import TestClient
-from main import app
+from app.main import app
 
 client = TestClient(app)
 

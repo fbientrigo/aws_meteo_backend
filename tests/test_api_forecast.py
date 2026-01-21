@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 # Mock s3_helpers BEFORE importing app to avoid S3 connection/dependency
 mock_s3 = MagicMock()
-sys.modules["s3_helpers"] = mock_s3
+sys.modules["app.s3_helpers"] = mock_s3
 
 # Configure the mock to return valid structures
 mock_s3.list_runs.return_value = ["2025010100"]
@@ -20,7 +20,7 @@ mock_ds.sel.return_value = mock_point
 mock_s3.load_dataset.return_value = mock_ds
 
 from fastapi.testclient import TestClient
-from main import app
+from app.main import app
 import pytest
 
 client = TestClient(app)

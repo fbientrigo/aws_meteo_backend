@@ -5,14 +5,14 @@ import numpy as np
 import os
 
 # Add project root to sys.path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../")))
 
-# Import imported get_subset. Since we are patching "main.load_dataset", 
+# Import imported get_subset. Since we are patching "app.main.load_dataset", 
 # we don't worry about previous imports of s3_helpers.
-from main import get_subset
+from app.main import get_subset
 
 class TestSTIEndpoint(unittest.TestCase):
-    @patch("main.load_dataset")
+    @patch("app.main.load_dataset")
     def test_get_subset_flattened_structure(self, mock_load_dataset):
         """
         Verify that get_subset returns flattened 1D arrays
